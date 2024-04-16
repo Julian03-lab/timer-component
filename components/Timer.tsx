@@ -1,75 +1,26 @@
+// React
 import React, { useState, useEffect } from "react";
 import { Text, View, StyleSheet, TouchableOpacity, Button } from "react-native";
-import BackgroundTimer from "react-native-background-timer";
+
+// Expo
+import { Link } from "expo-router";
 import * as Notifications from "expo-notifications";
 import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from "expo-av";
-import { Link } from "expo-router";
+
+// Dependencies
+import BackgroundTimer from "react-native-background-timer";
+
+// Component
 import FullTimer from "./FullTimer";
 
 const Timer = ({ initialSeconds }: { initialSeconds: number }) => {
-  const [seconds, setSeconds] = useState(initialSeconds);
   const [isRunning, setIsRunning] = useState(false);
+  const [fullTimer, setFullTimer] = useState(false);
+  const [seconds, setSeconds] = useState(initialSeconds);
   const [sound, setSound] = useState<Audio.Sound | undefined>();
   const [interval, setInterval] = useState<number | null>(null);
-  const [fullTimer, setFullTimer] = useState(false);
 
-  async function playSound() {
-    console.log("Loading Sound");
-    const { sound } = await Audio.Sound.createAsync(
-      require("../assets/alarm.wav")
-    );
-    setSound(sound);
-
-    console.log("Playing Sound");
-    await sound.setVolumeAsync(1);
-    await sound.setIsLoopingAsync(true);
-    await sound.playAsync();
-  }
-
-  async function stopSound() {
-    if (sound) {
-      console.log("Stopping Sound");
-      await sound.stopAsync();
-    }
-  }
-
-  useEffect(() => {
-    Audio.setAudioModeAsync({
-      staysActiveInBackground: true,
-      playsInSilentModeIOS: true,
-      interruptionModeIOS: InterruptionModeIOS.DoNotMix,
-      interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
-      shouldDuckAndroid: true,
-      playThroughEarpieceAndroid: true,
-    });
-    return sound
-      ? () => {
-          console.log("Unloading Sound");
-          sound.unloadAsync();
-        }
-      : undefined;
-  }, [sound]);
-
-  useEffect(() => {
-    let intervalId: number;
-
-    if (isRunning) {
-      intervalId = BackgroundTimer.setInterval(() => {
-        !interval && setInterval(intervalId);
-        setSeconds((prevSeconds) => {
-          if (prevSeconds === 1) {
-            playSound();
-            sendNotification();
-            return prevSeconds - 1;
-          }
-          return prevSeconds - 1;
-        });
-      }, 1000);
-    }
-
-    return () => BackgroundTimer.clearInterval(intervalId);
-  }, [isRunning]);
-
+  // UseEffect initial to configure the notification
   useEffect(() => {
     Notifications.setNotificationHandler({
       handleNotification: async () => ({
@@ -87,20 +38,65 @@ const Timer = ({ initialSeconds }: { initialSeconds: number }) => {
     });
   }, []);
 
+  // UseEffect to change the state of sound
+  useEffect(() => {
+    Audio.setAudioModeAsync({
+      staysActiveInBackground: true,
+      playsInSilentModeIOS: true,
+      interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+      interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
+      shouldDuckAndroid: true,
+      playThroughEarpieceAndroid: true,
+    });
+
+    return sound
+      ? () => {
+          console.log("Unloading Sound");
+          sound.unloadAsync();
+        }
+      : undefined;
+  }, [sound]);
+
+  // UseEffect to set interval of timer
+  useEffect(() => {
+    let intervalId: number;
+
+    if (isRunning) {
+      intervalId = BackgroundTimer.setInterval(() => {
+        !interval && setInterval(intervalId);
+        setSeconds((prevSeconds) => {
+          if (prevSeconds === 1 || prevSeconds < 0) {
+            playSound();
+            sendNotification();
+            BackgroundTimer.clearInterval(intervalId);
+            return 0;
+          }
+          return prevSeconds - 1;
+        });
+      }, 1000);
+    }
+
+    return () => BackgroundTimer.clearInterval(intervalId);
+  }, [isRunning]);
+
+  // Handle Start
   const startTimer = async () => {
     setIsRunning(true);
     // await registerForPushNotificationsAsync();
   };
 
+  // Handle Pause
   const pauseTimer = () => {
     setIsRunning(false);
   };
 
+  // Handle Reset
   const resetTimer = () => {
     setIsRunning(false);
     setSeconds(initialSeconds);
   };
 
+  // Handle Stop
   const stopTimer = () => {
     if (interval) {
       BackgroundTimer.clearInterval(interval);
@@ -110,20 +106,61 @@ const Timer = ({ initialSeconds }: { initialSeconds: number }) => {
     }
   };
 
+  // Handle to start the sound
+  async function playSound() {
+    console.log("Loading Sound");
+    const { sound } = await Audio.Sound.createAsync(
+      require("../assets/alarm.wav")
+    );
+    setSound(sound);
+
+    console.log("Playing Sound");
+    await sound.setVolumeAsync(1);
+    await sound.setIsLoopingAsync(true);
+    await sound.playAsync();
+
+    // Stop Sound if the limit of a time is pass (5 second)
+    setTimeout(async () => {
+      if (sound) {
+        sound.unloadAsync();
+      }
+    }, 10000);
+  }
+
+  // Handle to stop the sound
+  async function stopSound() {
+    if (sound) {
+      console.log("Stopping Sound");
+      await sound.stopAsync();
+    }
+  }
+
+  // Handle to send notification
   const sendNotification = async () => {
-    const res = await Notifications.scheduleNotificationAsync({
-      content: {
-        title: "You've got mail! 📬",
-        body: "Here is the notification body",
-        data: { data: "goes here" },
-      },
-      trigger: { seconds: 2 },
-    });
-    console.log("Sending notification: ", res);
+    // Verify if had permission
+    const settings = await Notifications.getPermissionsAsync();
+    if (
+      settings.granted ||
+      settings.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL
+    ) {
+      const res = await Notifications.scheduleNotificationAsync({
+        identifier: "test",
+        content: {
+          title: "You've got mail! 📬",
+          body: "Here is the notification body",
+          data: { data: "goes here" },
+        },
+        trigger: { seconds: 2 },
+      });
+      console.log(
+        "Sending notification: ",
+        res,
+        await Notifications.getPermissionsAsync()
+      );
+    }
   };
 
-  console.log(seconds);
-
+  // Format  time in MM:SS format
   const formatTime = (seconds: number) => {
     const minutes = Math.floor(Math.abs(seconds) / 60);
     const remainingSeconds = Math.abs(seconds) % 60;
@@ -132,6 +169,8 @@ const Timer = ({ initialSeconds }: { initialSeconds: number }) => {
       remainingSeconds < 10 ? `0${remainingSeconds}` : remainingSeconds;
     return `${formattedMinutes}:${formattedSeconds}`;
   };
+
+  console.log(seconds);
 
   return (
     <>
@@ -169,6 +208,7 @@ const Timer = ({ initialSeconds }: { initialSeconds: number }) => {
               <TouchableOpacity
                 style={styles.controlButton}
                 onPress={pauseTimer}
+                disabled={seconds === 0}
               >
                 <Text style={styles.controlButtonText}>⏸️</Text>
               </TouchableOpacity>
