@@ -119,12 +119,12 @@ const Timer = ({ initialSeconds }: { initialSeconds: number }) => {
     await sound.setIsLoopingAsync(true);
     await sound.playAsync();
 
-    // Stop Sound if the limit of a time is pass (5 second)
-    setTimeout(async () => {
+    // Stop Sound if the limit of a time is pass (15 second)
+    BackgroundTimer.setTimeout(async () => {
       if (sound) {
         sound.unloadAsync();
       }
-    }, 10000);
+    }, 15000);
   }
 
   // Handle to stop the sound
